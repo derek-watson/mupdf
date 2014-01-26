@@ -12,7 +12,7 @@ default: all
 # Do not specify CFLAGS or LIBS on the make invocation line - specify
 # XCFLAGS or XLIBS instead. Make ignores any lines in the makefile that
 # set a variable that was set on the command line.
-CFLAGS += $(XCFLAGS) -Iinclude -Iscripts -I$(GEN)
+CFLAGS += $(XCFLAGS) -Iinclude -Iscripts -I$(GEN) -fPIC
 LIBS += $(XLIBS) -lm
 
 include Makerules
@@ -54,6 +54,7 @@ endif
 CC_CMD = $(QUIET_CC) $(CC) $(CFLAGS) -o $@ -c $<
 CXX_CMD = $(QUIET_CXX) $(CXX) $(CFLAGS) -o $@ -c $<
 AR_CMD = $(QUIET_AR) $(AR) cr $@ $^
+SO_CMD = $(QUIET_LINK) $(CC) -fPIC --shared -Wl,-soname -Wl,`basename $@` $^ -o $@
 LINK_CMD = $(QUIET_LINK) $(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 MKDIR_CMD = $(QUIET_MKDIR) mkdir -p $@
 RM_CMD = $(QUIET_RM) rm -f $@
@@ -107,6 +108,7 @@ $(PDF_JS_NONE_OBJ) :=  $(FITZ_HDR) $(PDF_HDR) $(PDF_SRC_HDR)
 # --- Library ---
 
 MUPDF_LIB := $(OUT)/libmupdf.a
+MUPDF_LIB_SO := $(OUT)/libmupdf.so.1.0
 MUPDF_JS_NONE_LIB := $(OUT)/libmupdf-js-none.a
 
 $(MUPDF_LIB) : $(FITZ_OBJ) $(PDF_OBJ) $(XPS_OBJ) $(CBZ_OBJ) $(IMG_OBJ)
@@ -117,7 +119,11 @@ MUPDF_JS_V8_LIB := $(OUT)/libmupdf-js-v8.a
 $(MUPDF_JS_V8_LIB) : $(PDF_JS_V8_OBJ)
 endif
 
-INSTALL_LIBS := $(MUPDF_LIB) $(MUPDF_JS_NONE_LIB) $(MUPDF_JS_V8_LIB)
+INSTALL_LIBS := $(MUPDF_LIB) $(MUPDF_LIB_SO) $(MUPDF_JS_NONE_LIB) $(MUPDF_JS_V8_LIB)
+
+$(MUPDF_LIB_SO) :
+	$(SO_CMD)
+	@cd $(OUT) && ln -s `basename $(MUPDF_LIB_SO)` libmupdf.so
 
 # --- Rules ---
 
@@ -285,7 +291,7 @@ third: $(THIRD_LIBS)
 libs: $(INSTALL_LIBS)
 apps: $(INSTALL_APPS)
 
-install: libs apps
+install: libs apps third
 	install -d $(DESTDIR)$(incdir)/mupdf
 	install -d $(DESTDIR)$(incdir)/mupdf/fitz
 	install -d $(DESTDIR)$(incdir)/mupdf/pdf
@@ -304,6 +310,8 @@ install: libs apps
 
 	install -d $(DESTDIR)$(docdir)
 	install README COPYING CHANGES docs/*.txt $(DESTDIR)$(docdir)
+
+	install $(THIRD_LIBS) $(DESTDIR)$(libdir)
 
 tarball:
 	bash scripts/archive.sh
