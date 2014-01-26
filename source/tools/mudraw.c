@@ -984,6 +984,50 @@ trace_realloc(void *arg, void *p_, unsigned int size)
 	return &p[1];
 }
 
+fz_document *
+open_document_from_stdin(fz_context *ctx)
+{
+	int buf_size = 1024;
+	char buffer[buf_size];
+	size_t content_len = 0;
+	fz_buffer *input_buf = NULL;
+	fz_stream *input_stream = NULL;
+
+	char *content = malloc(sizeof(char) * buf_size);
+	if(content == NULL)
+	{
+    perror("Failed to allocate content");
+    exit(1);
+	}
+
+	size_t bytes_read = 0;
+	while((bytes_read = fread(buffer, 1, buf_size, stdin)))
+	{
+    char *old = content;
+    size_t new_len = content_len + bytes_read;
+    content = realloc(content, new_len);
+    if(content == NULL)
+    {
+      perror("Failed to reallocate content");
+      free(old);
+      exit(2);
+    }
+    memcpy(&content[content_len], buffer, bytes_read);
+    content_len += bytes_read;
+  }
+
+	if(ferror(stdin))
+	{
+    free(content);
+    perror("Error reading from stdin.");
+    exit(3);
+	}
+
+	input_buf = fz_new_buffer_from_data(ctx, (unsigned char *)content, content_len);
+	input_stream = fz_open_buffer(ctx, input_buf);
+	return fz_open_document_with_stream(ctx, "application/pdf", input_stream);
+}
+
 int main(int argc, char **argv)
 {
 	char *password = "";
@@ -1204,7 +1248,12 @@ int main(int argc, char **argv)
 
 				fz_try(ctx)
 				{
-					doc = fz_open_document(ctx, filename);
+					if (!strcmp(output, "-"))
+					{
+						doc = open_document_from_stdin(ctx);
+					}
+					else
+						doc = fz_open_document(ctx, filename);
 				}
 				fz_catch(ctx)
 				{
